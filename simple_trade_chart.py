@@ -1,20 +1,17 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.optimize import curve_fit
-import requests
-from bs4 import BeautifulSoup
-import json
 
 class NFLDraftTradeModel:
     def __init__(self):
         self.war_by_position = None
         self.salary_cap_data = None
-        self.consensus_board = None
+        self.board = None
         self.team_data = None
         
-    def load_data(self):
+    def load_data(self, board_path, wr_grades):
         
+        self.board = pd.read_csv(board_path)
+        self.wr_grade = pd.read_csv(wr_grades)
         self.war_by_position = pd.DataFrame({
             'Position': ['QB', 'RB/FB', 'WR', 'TE', 'T', 'G', 'C', 'DI', 'ED', 'LB', 'CB', 'S'],
             'Mean_WAR': [1.63, 0.10, 0.28, 0.18, 0.09, 0.10, 0.10, 0.06, 0.06, 0.11, 0.23, 0.23],
@@ -52,11 +49,12 @@ class NFLDraftTradeModel:
         # Return relative strength
         return player_war / position_war
     
-    def evaluate_pick_relative_to_consensus(self, player, pick):
-        consensus_pick = self.consensus_board[
-                self.consensus_board['Player'] == player]['Mean_WAR'].values[0]
-    
-        return consensus_pick / pick
+    def evaluate_pick_relative_to_board(self, player, pick):
+        
+        player_rank = self.board[
+            self.board['Player'] == player]['Rank'].values[0]
+
+        return player_rank / pick
 
     def evaluate_position_relevance(self, position):
         '''
@@ -83,51 +81,59 @@ class NFLDraftTradeModel:
         # Return relative importance
         return position_war / qb_war
     
-    def evaluate_team_need(self, team_position_cap, league_avg_position_cap):
+    def evaluate_team_need(self, position, team="NE"):
+        
+        league_position_grade = self.wr_grade[
+            (self.wr_grade['position'] == position) & (self.wr_grade['targets'] > 35)]['grades_offense'].values
+        avg_league_position_grade = np.mean(league_position_grade)
 
-        return league_avg_position_cap / team_position_cap if team_position_cap > 0 else None
+        team_players_grade = self.wr_grade[
+            (self.wr_grade['position'] == position) & (self.wr_grade['team_name'] == team) 
+            & (self.wr_grade['targets'] > 35)]['grades_offense'].values
+        avg_team_position_grade = np.mean(team_players_grade)
+        
+        print(avg_league_position_grade, avg_team_position_grade)
     
-    def evaluate_trade(self, team_giving_picks, team_receiving_picks, team_position_cap, 
-                      league_avg_position_cap, picks_given, picks_received, player_war,
-                      player, target_position):
+    def evaluate_trade(self, your_team, other_team, picks_given, picks_received, mode, player, 
+                       team_position_cap=None, league_avg_position_cap=None, player_war=None, target_position=None):
 
         # Calculate raw performance value of picks
         perfomance_value_given = sum(self.calculate_performance_value(pick) for pick in picks_given)
         performance_value_received = sum(self.calculate_performance_value(pick) for pick in picks_received)
         
-        raw_value_difference = performance_value_received - perfomance_value_given
-        adjusted_value_difference = raw_value_difference
+        value_difference = performance_value_received - perfomance_value_given
 
-        player_strength = self.evaluate_player_strength(
-            target_position, player_war)
-        position_relevance = self.evaluate_position_relevance(target_position)
-        team_need = self.evaluate_team_need(team_position_cap, league_avg_position_cap)
-        
-        adjustment_factor = player_strength * position_relevance * team_need
-        adjusted_value_difference = (
-            raw_value_difference * adjustment_factor if adjustment_factor < 1
-            else abs(raw_value_difference * adjustment_factor)
-        )
-        
-        if abs(adjusted_value_difference/perfomance_value_given) < 0.2:
+        if mode == "trade_up":
+            player_strength = self.evaluate_player_strength(target_position, player_war)
+            position_relevance = self.evaluate_position_relevance(target_position)
+            team_need = self.evaluate_team_need(target_position)
+            pick_value = self.evaluate_pick_relative_to_board(player, min(picks_received))
+
+            adjustment_factor = player_strength * position_relevance * team_need * pick_value
+
+            value_difference += abs(value_difference * adjustment_factor)
+
+        degree_of_favoreness = value_difference/perfomance_value_given
+
+        if abs(degree_of_favoreness) < 0.2:
             favored_team = "Equal value"
             degree = "Equal"
-        elif adjusted_value_difference > 0:
-            favored_team = team_giving_picks
-            if abs(adjusted_value_difference/perfomance_value_given) > 1:
+        elif value_difference > 0:
+            favored_team = your_team
+            if abs(degree_of_favoreness) > 1:
                 degree = "Strongly favors"
             else:
                 degree = "Slightly favors"
         else:
-            favored_team = team_receiving_picks
-            if abs(adjusted_value_difference/perfomance_value_given) > 1:
+            favored_team = other_team
+            if abs(degree_of_favoreness) > 1:
                 degree = "Strongly favors"
             else:
                 degree = "Slightly favors"
         
         return {
-            "raw_value_difference": raw_value_difference,
-            "adjusted_value_difference": adjusted_value_difference,
+            "value_difference": value_difference,
+            "degree of favoreness": degree_of_favoreness,
             "favored_team": favored_team,
             "degree": degree
         }
@@ -135,18 +141,22 @@ class NFLDraftTradeModel:
 def main():
     model = NFLDraftTradeModel()
     
-    model.load_data()
+    model.load_data(
+        board_path="board.csv",
+        wr_grades="receiving_summary (2).csv"
+    )
     
     result = model.evaluate_trade(
-        team_giving_picks="Jaguars",
-        team_receiving_picks="Browns",
+        your_team="Jaguars",
+        other_team="Browns",
         team_position_cap=20,
         league_avg_position_cap=35,
         picks_given=[5, 16, 36, 126],
         picks_received=[2, 104, 200],
-        player_war=0.9,
+        player_war=2,
+        target_position="WR",
         player="Travis Hunter",
-        target_position="WR"
+        mode="trade_up"
     )
     
     print(result)
