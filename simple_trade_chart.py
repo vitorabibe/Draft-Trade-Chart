@@ -13,7 +13,7 @@ class NFLDraftTradeModel:
         self.board = pd.read_csv(board_path)
         self.wr_grade = pd.read_csv(wr_grades)
         self.war_by_position = pd.DataFrame({
-            'Position': ['QB', 'RB/FB', 'WR', 'TE', 'T', 'G', 'C', 'DI', 'ED', 'LB', 'CB', 'S'],
+            'Position': ['QB', 'RB', 'WR', 'TE', 'T', 'G', 'C', 'DL', 'ED', 'LB', 'CB', 'S'],
             'Mean_WAR': [1.63, 0.10, 0.28, 0.18, 0.09, 0.10, 0.10, 0.06, 0.06, 0.11, 0.23, 0.23],
             'CoV_WAR': [0.70, 0.64, 0.84, 0.62, 1.09, 1.11, 1.08, 1.34, 1.54, 0.83, 0.91, 0.77],
         })
@@ -81,18 +81,34 @@ class NFLDraftTradeModel:
         # Return relative importance
         return position_war / qb_war
     
-    def evaluate_team_need(self, position, team="NE"):
+    def evaluate_team_need(self, position, team):
         
-        league_position_grade = self.wr_grade[
-            (self.wr_grade['position'] == position) & (self.wr_grade['targets'] > 35)]['grades_offense'].values
-        avg_league_position_grade = np.mean(league_position_grade)
+        '''
+        Compares PFF grades of selected position to that of the average in the NFL.
+        Only players that are in PFF's first toggleable threshold of player participation are taken into account
+        This is to minimize the amount of outliers in a team (ie. patriots QB Joe Milton being the best rated QB)
+        ''' 
+        if position == "WR":
+            league_position_grade = self.wr_grade[
+                (self.wr_grade['position'] == position) & (self.wr_grade['targets'] > 35)]['grades_offense'].values
+            avg_league_position_grade = np.mean(league_position_grade)
 
-        team_players_grade = self.wr_grade[
-            (self.wr_grade['position'] == position) & (self.wr_grade['team_name'] == team) 
-            & (self.wr_grade['targets'] > 35)]['grades_offense'].values
-        avg_team_position_grade = np.mean(team_players_grade)
+            team_players_grade = self.wr_grade[
+                (self.wr_grade['position'] == position) & (self.wr_grade['team_name'] == team) 
+                & (self.wr_grade['targets'] > 35)]['grades_offense'].values
+            avg_team_position_grade = np.mean(team_players_grade)
+
+        elif position == "QB":
+            pass
+
+        elif position == "RB":
+            pass
+
+        elif position == "DL" or position == "CB" or position == "ED":
+            pass
         
-        print(avg_league_position_grade, avg_team_position_grade)
+        return avg_team_position_grade / avg_league_position_grade
+        
     
     def evaluate_trade(self, your_team, other_team, picks_given, picks_received, mode, player, 
                        team_position_cap=None, league_avg_position_cap=None, player_war=None, target_position=None):
@@ -103,6 +119,7 @@ class NFLDraftTradeModel:
         
         value_difference = performance_value_received - perfomance_value_given
 
+        # Make extra calculations in case trade up mode is selected
         if mode == "trade_up":
             player_strength = self.evaluate_player_strength(target_position, player_war)
             position_relevance = self.evaluate_position_relevance(target_position)

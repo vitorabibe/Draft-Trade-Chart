@@ -1,9 +1,7 @@
 This is a simple draft trade chart I developed using draft pick performance values determined by Massey & Thaler in "The Loser's Curse". 
 
-During the next few days, I hope to transform this into a simple, yet more complicated than this, ML regression model that determines whether or not the trade is worth it based on the WAR difference from historical trades.
+The chart has a toggleable function between trade up and regular trade. In trade up, you are targetting one specific player, and that factors into the calculation. Differently, in regular trade only picks' values are taken into account. 
 
-To use the trade chart, simply change the contents in the evaluate_trade function call. Currently, it is set to the Jaguars-Browns blcokbuster trade in the 2025 NFL draft. Travis Hunter's WAR value is an average of the NFL's top 5 CBs and WRs WAR value.
+To use the trade chart, simply select the mode you want and change the contents in the evaluate_trade function call accordingly. Currently, it is set to the Jaguars-Browns blcokbuster trade in the 2025 NFL draft. Travis Hunter's WAR value is an average of the NFL's top 5 CBs and WRs WAR value.
 
-For this model to actually be used, WAR values would need to be calculated or found (and changed accordingly in both cases). Mean and deviation in WAR values come from "PFF WAR: Modeling Player Value in American Football".
-
-In my opinion, there are two main weaknesses in this chart. One is the fact that the chart relies on how much of the salary cap a certain position occupies relative to other teams. This does not correctly account for rookies — who are in rookie deals and thus receive much less money. The second is the fact that it only truly works for one player (who plays one position — a flaw when using Travis Hunter trade for example), and also requires a target player/position for it to work. These two issues should be fixed when I work on my regression model (ie. trade chart 2.0).
+For this model to actually be used, WAR values would need to be calculated or found (and changed accordingly in both cases). Mean and deviation in WAR values for positions come from "PFF WAR: Modeling Player Value in American Football".
